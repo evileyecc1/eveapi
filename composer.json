@@ -22,7 +22,7 @@
         "php": ">=7.0",
         "laravel/framework": "5.6.*",
         "3rdpartyeve/phealng": "~2.3",
-        "evileyecc1/services": "2.0.*",
+        "evileyecc1/services": "dev-master",
         "doctrine/dbal": "^2.5"
     },
     "require-dev": {
