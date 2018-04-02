@@ -22,6 +22,7 @@
 
 namespace Seat\Eveapi\Jobs;
 
+use Exception;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -30,16 +31,19 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Seat\Eseye\Containers\EsiAuthentication;
 use Seat\Eseye\Containers\EsiResponse;
+use Seat\Eseye\Exceptions\RequestFailedException;
 use Seat\Eveapi\Models\Character\CharacterInfo;
 use Seat\Eveapi\Models\Character\CharacterRole;
 use Seat\Eveapi\Models\RefreshToken;
 
 /**
  * Class EsiBase
+ *
  * @package Seat\Eveapi\Jobs
  */
 abstract class EsiBase implements ShouldQueue
 {
+
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     /**
@@ -134,8 +138,7 @@ abstract class EsiBase implements ShouldQueue
     public function __construct(RefreshToken $token = null)
     {
 
-        if (is_null($token))
-            $this->public_call = true;
+        if (is_null($token)) $this->public_call = true;
 
         else
             $this->token = $token;
@@ -148,19 +151,19 @@ abstract class EsiBase implements ShouldQueue
      * @return bool
      * @throws \Exception
      */
-    public function authenticated(): bool
+    public function authenticated() : bool
     {
 
         // Public calls need no checking.
-        if ($this->public_call || is_null($this->token) || $this->scope === 'public')
-            return true;
+        if ($this->public_call || is_null($this->token) || $this->scope === 'public') return true;
+
+        if($this->token->expired == 1) return false;
 
         // Check if the current scope also needs a corp role. If it does,
         // ensure that the current character also has the required role.
-        if (! empty($this->getScopeRoles($this->scope))) {
+        if ( !empty($this->getScopeRoles($this->scope))) {
 
-            if (in_array($this->scope, $this->token->scopes) && ! empty(
-                array_intersect($this->getScopeRoles($this->scope), $this->getCharacterRoles()))) {
+            if (in_array($this->scope, $this->token->scopes) && !empty(array_intersect($this->getScopeRoles($this->scope), $this->getCharacterRoles()))) {
 
                 return true;
             }
@@ -173,8 +176,7 @@ abstract class EsiBase implements ShouldQueue
 
         // If a corporation role is *not* required, check that we have the required
         // scope at least.
-        if (in_array($this->scope, $this->token->scopes))
-            return true;
+        if (in_array($this->scope, $this->token->scopes)) return true;
 
         // Log the deny
         Log::debug('Denied call to ' . $this->endpoint . ' as scope ' . $this->scope . ' was missing.');
@@ -196,13 +198,12 @@ abstract class EsiBase implements ShouldQueue
      *
      * @return array
      */
-    public function getScopeRoles(string $scope): array
+    public function getScopeRoles(string $scope) : array
     {
 
         $roles = config('eveapi.corp_roles');
 
-        if (array_key_exists($scope, $roles))
-            return $roles[$scope];
+        if (array_key_exists($scope, $roles)) return $roles[$scope];
 
         return [];
     }
@@ -213,15 +214,13 @@ abstract class EsiBase implements ShouldQueue
      * @return array
      * @throws \Exception
      */
-    public function getCharacterRoles(): array
+    public function getCharacterRoles() : array
     {
 
-        return CharacterRole::where('character_id', $this->getCharacterId())
-            // https://eve-seat.slack.com/archives/C0H3VGH4H/p1515081536000720
+        return CharacterRole::where('character_id', $this->getCharacterId())// https://eve-seat.slack.com/archives/C0H3VGH4H/p1515081536000720
             // > @ccp_snowden: most things will require `roles`, most things are
             // > not contextually aware enough to make hq/base decisions
-            ->where('scope', 'roles')
-            ->pluck('role')->all();
+                            ->where('scope', 'roles')->pluck('role')->all();
     }
 
     /**
@@ -231,7 +230,7 @@ abstract class EsiBase implements ShouldQueue
      * @throws \Exception
      * @throws \Throwable
      */
-    public function retrieve(array $path_values = []): EsiResponse
+    public function retrieve(array $path_values = []) : EsiResponse
     {
 
         $this->validateCall();
@@ -242,11 +241,8 @@ abstract class EsiBase implements ShouldQueue
         $client->setQueryString($this->query_string);
 
         // Configure the page to get
-        if (! is_null($this->page))
-            $client->page($this->page);
-
+        if ( !is_null($this->page)) $client->page($this->page);
         $result = $client->invoke($this->method, $this->endpoint, $path_values);
-
         // Perform error checking
         $this->logWarnings($result);
 
@@ -254,6 +250,7 @@ abstract class EsiBase implements ShouldQueue
         $this->updateRefreshToken();
 
         return $result;
+
     }
 
     /**
@@ -263,17 +260,20 @@ abstract class EsiBase implements ShouldQueue
      * @return void
      * @throws \Exception
      */
-    public function validateCall(): void
+    public function validateCall() : void
     {
 
-        if (! in_array($this->method, ['get', 'post', 'put', 'patch', 'delete']))
-            throw new \Exception('Invalid HTTP method used');
+        if ( !in_array($this->method, [
+            'get',
+            'post',
+            'put',
+            'patch',
+            'delete'
+        ])) throw new \Exception('Invalid HTTP method used');
 
-        if (trim($this->endpoint) === '')
-            throw new \Exception('Empty endpoint used');
+        if (trim($this->endpoint) === '') throw new \Exception('Empty endpoint used');
 
-        if (trim($this->version) === '')
-            throw new \Exception('Version is empty');
+        if (trim($this->version) === '') throw new \Exception('Version is empty');
     }
 
     /**
@@ -286,13 +286,11 @@ abstract class EsiBase implements ShouldQueue
     public function eseye()
     {
 
-        if ($this->client)
-            return $this->client;
+        if ($this->client) return $this->client;
 
         $this->client = app('esi-client');
 
-        if (is_null($this->token))
-            return $this->client = $this->client->get();
+        if (is_null($this->token)) return $this->client = $this->client->get();
 
         return $this->client = $this->client->get(new EsiAuthentication([
             'refresh_token' => $this->token->refresh_token,
@@ -309,34 +307,32 @@ abstract class EsiBase implements ShouldQueue
      *
      * @throws \Throwable
      */
-    public function logWarnings(EsiResponse $response): void
+    public function logWarnings(EsiResponse $response) : void
     {
 
         // While development heavy, throw exceptions to help.
-        if (! is_null($response->pages) && $this->page === null)
-            $this->eseye()->getLogger()->warning('Response contained pages but none was expected');
+        if ( !is_null($response->pages) && $this->page === null) $this->eseye()->getLogger()
+                                                                      ->warning('Response contained pages but none was expected');
 
-        if (! is_null($this->page) && $response->pages === null)
-            $this->eseye()->getLogger()->warning('Expected a paged response but had none');
+        if ( !is_null($this->page) && $response->pages === null) $this->eseye()->getLogger()
+                                                                      ->warning('Expected a paged response but had none');
 
-        if (array_key_exists('Warning', $response->headers))
-            $this->eseye()->getLogger()->warning('A response contained a warning: ' .
-                $response->headers['Warning']);
+        if (array_key_exists('Warning', $response->headers)) $this->eseye()->getLogger()
+                                                                  ->warning('A response contained a warning: ' . $response->headers['Warning']);
     }
 
     /**
      * Update the access_token last used in the job,
      * along with the expiry time.
      */
-    public function updateRefreshToken(): void
+    public function updateRefreshToken() : void
     {
 
         tap($this->token, function ($token) {
 
             // If no API call was made, the client would never have
             // been instantiated and auth information never updated.
-            if (is_null($this->client) || $this->public_call)
-                return;
+            if (is_null($this->client) || $this->public_call) return;
 
             $last_auth = $this->client->getAuthentication();
 
@@ -356,11 +352,10 @@ abstract class EsiBase implements ShouldQueue
      *
      * @return bool
      */
-    public function nextPage(int $pages): bool
+    public function nextPage(int $pages) : bool
     {
 
-        if ($this->page >= $pages)
-            return false;
+        if ($this->page >= $pages) return false;
 
         $this->page++;
 
@@ -377,20 +372,24 @@ abstract class EsiBase implements ShouldQueue
      * @return array
      * @throws \Exception
      */
-    public function tags(): array
+    public function tags() : array
     {
 
         if (property_exists($this, 'tags')) {
-            if (is_null($this->token))
-                return array_merge($this->tags, ['public']);
+            if (is_null($this->token)) return array_merge($this->tags, ['public']);
 
             return array_merge($this->tags, ['character_id:' . $this->getCharacterId()]);
         }
 
-        if (is_null($this->token))
-            return ['unknown_tag', 'public'];
+        if (is_null($this->token)) return [
+            'unknown_tag',
+            'public'
+        ];
 
-        return ['unknown_tag', 'character_id:' . $this->getCharacterId()];
+        return [
+            'unknown_tag',
+            'character_id:' . $this->getCharacterId()
+        ];
     }
 
     /**
@@ -401,11 +400,10 @@ abstract class EsiBase implements ShouldQueue
      * @return int
      * @throws \Exception
      */
-    public function getCharacterId(): int
+    public function getCharacterId() : int
     {
 
-        if (is_null($this->token))
-            throw new \Exception('No token specified');
+        if (is_null($this->token)) throw new \Exception('No token specified');
 
         return $this->token->character_id;
     }
@@ -419,11 +417,10 @@ abstract class EsiBase implements ShouldQueue
      * @return int
      * @throws \Exception
      */
-    public function getCorporationId(): int
+    public function getCorporationId() : int
     {
 
-        return CharacterInfo::where('character_id', $this->getCharacterId())
-            ->first()->corporation_id;
+        return CharacterInfo::where('character_id', $this->getCharacterId())->first()->corporation_id;
     }
 
     /**
@@ -432,4 +429,12 @@ abstract class EsiBase implements ShouldQueue
      * @return void
      */
     abstract public function handle();
+
+    public function failed(Exception $exception)
+    {
+        if($exception instanceof RequestFailedException && $exception->getCode() == 400)
+        {
+            $this->token->update(['expired'=>1]);
+        }
+    }
 }

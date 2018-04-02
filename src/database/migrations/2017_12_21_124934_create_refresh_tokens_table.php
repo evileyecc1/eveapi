@@ -22,6 +22,8 @@ class CreateRefreshTokensTable extends Migration
             $table->json('scopes');
             $table->dateTime('expires_on');
             $table->string('token');
+            $table->integer('user_id')->default(0);
+            $table->tinyInteger('expired')->default(0);
 
             $table->timestamps();
         });

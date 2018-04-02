@@ -58,7 +58,7 @@ class CharacterInfo extends Model
     {
 
         return CharacterCorporationHistory::where('character_id', $this->character_id)
-            ->latest()->first();
+            ->latest('start_date')->first();
     }
 
     /**

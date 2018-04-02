@@ -52,7 +52,7 @@ class RefreshToken extends Model
     /**
      * @var array
      */
-    protected $fillable = ['character_id', 'refresh_token', 'scopes', 'expires_on', 'token'];
+    protected $fillable = ['character_id', 'refresh_token', 'scopes', 'expires_on', 'token','expired'];
 
     /**
      * Only return a token value if it is not already
