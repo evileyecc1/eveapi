@@ -22,6 +22,7 @@
 
 namespace Seat\Eveapi\Helpers;
 
+use Seat\Eseye\Cache\NullCache;
 use Seat\Eseye\Cache\RedisCache;
 use Seat\Eseye\Configuration;
 use Seat\Eseye\Containers\EsiAuthentication;
@@ -42,7 +43,7 @@ class EseyeSetup
         $config = Configuration::getInstance();
         $config->http_user_agent = 'SeAT v' . config('eveapi.config.version');
         $config->logfile_location = storage_path('logs/eseye.log');
-        $config->cache = RedisCache::class;
+        $config->cache = NullCache::class;
     }
 
     /**
